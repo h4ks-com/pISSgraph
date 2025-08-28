@@ -65,6 +65,31 @@ def create_app(database: Database, cors_origins: str = "http://localhost:3000", 
             for reading in reversed(readings)  # Reverse to get chronological order
         ]
         
+        # Add current timestamp with latest value to show horizontal line to "now"
+        # This shows that the urine level is constant until the next change
+        if data_points:
+            last_reading = data_points[-1]  # Most recent reading
+            current_time = datetime.utcnow()
+            
+            # Only add current timestamp if it's significantly newer than last reading
+            # and if we have a time range that includes "now"
+            time_diff = (current_time - last_reading.timestamp).total_seconds()
+            includes_now = not end_time or (end_time - current_time).total_seconds() >= -10  # Allow 10 second buffer
+            
+            if includes_now and time_diff > 60:  # More than 1 minute old
+                
+                # Use live telemetry value if available, otherwise use last database value
+                current_value = last_reading.urine_tank_level
+                if telemetry_service and telemetry_service.current_value is not None:
+                    current_value = telemetry_service.current_value
+                
+                data_points.append(
+                    TelemetryDataPoint(
+                        timestamp=current_time,
+                        urine_tank_level=current_value
+                    )
+                )
+        
         return TelemetryResponse(
             data=data_points,
             start_time=start_time,

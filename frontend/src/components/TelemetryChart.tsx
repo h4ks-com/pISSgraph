@@ -167,7 +167,7 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
               <ReferenceLine y={20} stroke="#10b981" strokeDasharray="5 5" />
               
               <Line
-                type="monotone"
+                type="stepAfter"
                 dataKey="urine_tank_level"
                 stroke="#3b82f6"
                 strokeWidth={2}
