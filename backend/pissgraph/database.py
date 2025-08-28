@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, select
+from sqlalchemy import DateTime, Float, Integer, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -73,6 +73,14 @@ class Database:
             query = select(TelemetryReading).order_by(TelemetryReading.timestamp.desc()).limit(1)
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def clear_all_readings(self) -> int:
+        """Clear all telemetry readings from the database"""
+        async with self.session_maker() as session:
+            query = delete(TelemetryReading)
+            result = await session.execute(query)
+            await session.commit()
+            return result.rowcount or 0
 
     async def close(self) -> None:
         """Close database connection"""

@@ -9,6 +9,7 @@ services:
       - DATABASE_PATH=/app/data/pissgraph.db
       - POLLING_INTERVAL=${POLLING_INTERVAL:-60}
       - CORS_ORIGINS=${FRONTEND_URL:-http://localhost:3000}
+      - ENABLE_SEED_ENDPOINT=${ENABLE_SEED_ENDPOINT:-true}
     volumes:
       - pissgraph_data:/app/data
     restart: unless-stopped

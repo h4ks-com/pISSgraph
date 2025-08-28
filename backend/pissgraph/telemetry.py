@@ -27,6 +27,8 @@ class TelemetryService:
     async def start(self) -> None:
         """Start the telemetry polling service"""
         await self.db.init()
+        # Do an immediate poll on startup to get initial data
+        await self._poll_telemetry()
         self._polling_task = asyncio.create_task(self._polling_loop())
 
     async def stop(self) -> None:
@@ -55,21 +57,42 @@ class TelemetryService:
         """Poll telemetry data and store if changed"""
         try:
             value = await self._get_current_value()
-            if value is not None and value != self.current_value:
-                await self._store_value(value)
-                self.current_value = value
-                logger.info(f"Stored new urine tank level: {value}%")
+            if value is not None:
+                # Check if database is empty to always store first value
+                latest_db_reading = await self.db.get_latest_reading()
+                
+                # Store if: database is empty OR value has changed from last stored value
+                should_store = False
+                if latest_db_reading is None:
+                    # Database is empty, store the first value
+                    should_store = True
+                    logger.info(f"Database empty, storing initial value: {value}%")
+                elif value != latest_db_reading.urine_tank_level:
+                    # Value changed from last stored value
+                    should_store = True
+                    logger.info(f"Value changed from {latest_db_reading.urine_tank_level}% to {value}%")
+                
+                if should_store:
+                    await self._store_value(value)
+                    logger.info(f"Stored new urine tank level: {value}%")
         except Exception as e:
             logger.error(f"Failed to poll telemetry: {e}")
 
     async def _get_current_value(self) -> Optional[float]:
         """Get current telemetry value from Lightstreamer"""
         if not await self._ensure_connected():
+            logger.warning("Could not connect to Lightstreamer")
             return None
 
-        # Wait briefly for data if we just connected
+        # Wait for initial data if we don't have any yet
         if self.current_value is None:
-            await asyncio.sleep(2)
+            logger.info("Waiting for initial telemetry data...")
+            for i in range(10):  # Wait up to 10 seconds for initial data
+                await asyncio.sleep(1)
+                if self.current_value is not None:
+                    break
+            else:
+                logger.warning("No telemetry data received after 10 seconds")
 
         return self.current_value
 
@@ -86,12 +109,14 @@ class TelemetryService:
     async def _connect(self) -> bool:
         """Connect to NASA's ISS telemetry stream"""
         try:
+            logger.info("Connecting to NASA ISS telemetry stream...")
             self.client = LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")
 
             connection_future = asyncio.Future()
 
             class ConnectionListener:
                 def onStatusChange(self, new_status: str) -> None:
+                    logger.info(f"Lightstreamer status: {new_status}")
                     if new_status == "CONNECTED:WS-STREAMING":
                         if not connection_future.done():
                             connection_future.set_result(True)
@@ -103,13 +128,14 @@ class TelemetryService:
             self.client.connect()
 
             try:
-                result = await asyncio.wait_for(connection_future, timeout=10.0)
+                result = await asyncio.wait_for(connection_future, timeout=15.0)
                 if result:
                     self.connected = True
                     await self._subscribe_telemetry()
+                    logger.info("Successfully connected to ISS telemetry stream")
                     return True
             except asyncio.TimeoutError:
-                logger.warning("Connection to Lightstreamer timed out")
+                logger.warning("Connection to Lightstreamer timed out after 15 seconds")
 
         except Exception as e:
             logger.error(f"Failed to connect to Lightstreamer: {e}")
@@ -121,6 +147,7 @@ class TelemetryService:
         if not self.client:
             return
 
+        logger.info(f"Subscribing to telemetry node: {URINE_TANK_NODE}")
         self.subscription = Subscription("MERGE", [URINE_TANK_NODE], ["Value"])
 
         class TelemetryListener:
@@ -132,12 +159,15 @@ class TelemetryService:
                 value = update.getValue("Value")
                 if value is not None and item_name == URINE_TANK_NODE:
                     try:
-                        self.service.current_value = float(value)
+                        new_value = float(value)
+                        logger.debug(f"Received telemetry update: {new_value}%")
+                        self.service.current_value = new_value
                     except (ValueError, TypeError):
-                        pass
+                        logger.warning(f"Invalid telemetry value received: {value}")
 
         self.subscription.addListener(TelemetryListener(self))
         self.client.subscribe(self.subscription)
+        logger.info("Telemetry subscription activated")
 
     def _disconnect(self) -> None:
         """Disconnect from telemetry stream"""

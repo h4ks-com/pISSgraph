@@ -23,10 +23,10 @@ class TelemetryResponse(BaseModel):
 class LatestReadingResponse(BaseModel):
     timestamp: datetime
     urine_tank_level: float
-    status: str = "active"
+    status: str = "active"  # active, stale, or live
 
 
-def create_app(database: Database, cors_origins: str = "http://localhost:3000") -> FastAPI:
+def create_app(database: Database, cors_origins: str = "http://localhost:3000", enable_seed_endpoint: bool = True, telemetry_service=None) -> FastAPI:
     app = FastAPI(
         title="pISSgraph API",
         description="ISS Urine Tank Telemetry Data API",
@@ -77,6 +77,16 @@ def create_app(database: Database, cors_origins: str = "http://localhost:3000") 
         """Get the latest ISS urine tank reading"""
         reading = await database.get_latest_reading()
         
+        # If no database reading exists, try to get real-time data from telemetry service
+        if not reading and telemetry_service:
+            current_value = telemetry_service.current_value
+            if current_value is not None:
+                return LatestReadingResponse(
+                    timestamp=datetime.utcnow(),
+                    urine_tank_level=current_value,
+                    status="live"
+                )
+        
         if not reading:
             raise HTTPException(status_code=404, detail="No telemetry data available")
         
@@ -93,5 +103,42 @@ def create_app(database: Database, cors_origins: str = "http://localhost:3000") 
     async def health_check() -> dict[str, str]:
         """Health check endpoint"""
         return {"status": "healthy"}
+
+    if enable_seed_endpoint:
+        @app.post("/telemetry/seed")
+        async def seed_telemetry() -> dict[str, str]:
+            """Seed database with sample telemetry data for testing"""
+            from datetime import datetime, timedelta
+            import random
+            
+            # Only allow seeding if database is empty
+            latest = await database.get_latest_reading()
+            if latest:
+                return {"message": "Database already contains data"}
+            
+            # Create some sample data points over the last hour
+            now = datetime.utcnow()
+            base_level = 45.0  # Start at 45%
+            
+            for i in range(12):  # 12 data points over the last hour
+                timestamp = now - timedelta(minutes=60 - (i * 5))  # Every 5 minutes
+                # Add some random variation to make it realistic
+                level = base_level + random.uniform(-2.0, 2.0)
+                level = max(0, min(100, level))  # Clamp between 0-100%
+                
+                from .database import TelemetryReading
+                reading = TelemetryReading(
+                    timestamp=timestamp,
+                    urine_tank_level=level
+                )
+                await database.add_reading(reading)
+            
+            return {"message": "Sample telemetry data added"}
+
+        @app.delete("/telemetry/clear")
+        async def clear_telemetry() -> dict[str, str]:
+            """Clear all telemetry data from the database"""
+            deleted_count = await database.clear_all_readings()
+            return {"message": f"Cleared {deleted_count} telemetry readings"}
 
     return app

@@ -20,6 +20,7 @@ PORT = int(os.getenv("PORT", "8000"))
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./data/pissgraph.db")
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "60"))
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+ENABLE_SEED_ENDPOINT = os.getenv("ENABLE_SEED_ENDPOINT", "true").lower() == "true"
 
 # Global services
 database = Database(DATABASE_PATH)
@@ -40,7 +41,7 @@ async def lifespan(app):
     await database.close()
 
 
-app = create_app(database, CORS_ORIGINS)
+app = create_app(database, CORS_ORIGINS, ENABLE_SEED_ENDPOINT, telemetry_service)
 app.router.lifespan_context = lifespan
 
 

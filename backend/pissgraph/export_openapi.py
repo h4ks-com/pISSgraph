@@ -13,8 +13,8 @@ def export_openapi_json(output_path: str) -> None:
     # Create a dummy database instance (won't be used)
     database = Database(":memory:")
     
-    # Create the FastAPI app
-    app = create_app(database)
+    # Create the FastAPI app with seed endpoint enabled for OpenAPI documentation
+    app = create_app(database, enable_seed_endpoint=True, telemetry_service=None)
     
     # Generate OpenAPI JSON
     openapi_json = app.openapi()
