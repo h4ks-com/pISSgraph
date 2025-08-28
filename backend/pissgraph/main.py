@@ -1,7 +1,8 @@
-import asyncio
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -28,14 +29,14 @@ telemetry_service = TelemetryService(database, POLLING_INTERVAL)
 
 
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(app: Any) -> AsyncGenerator[None, None]:
     """Application lifespan manager"""
     logger.info("Starting pISSgraph backend...")
     await telemetry_service.start()
     logger.info(f"Telemetry service started with {POLLING_INTERVAL}s polling interval")
-    
+
     yield
-    
+
     logger.info("Shutting down pISSgraph backend...")
     await telemetry_service.stop()
     await database.close()
@@ -47,13 +48,7 @@ app.router.lifespan_context = lifespan
 
 def run() -> None:
     """Run the application"""
-    uvicorn.run(
-        "pissgraph.main:app",
-        host="0.0.0.0",
-        port=PORT,
-        reload=False,
-        log_level="info"
-    )
+    uvicorn.run("pissgraph.main:app", host="0.0.0.0", port=PORT, reload=False, log_level="info")
 
 
 if __name__ == "__main__":

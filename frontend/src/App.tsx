@@ -44,8 +44,8 @@ function App() {
         </div>
 
         <main>
-          <TelemetryChart 
-            timeRange={selectedTimeRange} 
+          <TelemetryChart
+            timeRange={selectedTimeRange}
             refreshInterval={30}
           />
         </main>
@@ -53,9 +53,9 @@ function App() {
         <footer className="text-center mt-8 text-sm text-gray-500">
           <p>
             Data sourced from NASA's live ISS telemetry stream via{' '}
-            <a 
-              href="https://iss-mimic.github.io/Mimic/" 
-              target="_blank" 
+            <a
+              href="https://iss-mimic.github.io/Mimic/"
+              target="_blank"
               rel="noopener noreferrer"
               className="text-blue-500 hover:underline"
             >

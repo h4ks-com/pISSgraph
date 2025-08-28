@@ -1,12 +1,14 @@
 import asyncio
+import contextlib
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any
 
-import aiohttp
-from lightstreamer.client import LightstreamerClient, Subscription
+from lightstreamer.client import LightstreamerClient
+from lightstreamer.client import Subscription
 
-from .database import Database, TelemetryReading
+from .database import Database
+from .database import TelemetryReading
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +19,12 @@ class TelemetryService:
     def __init__(self, db: Database, polling_interval: int = 60):
         self.db = db
         self.polling_interval = polling_interval
-        self.client: Optional[LightstreamerClient] = None
-        self.subscription: Optional[Subscription] = None
+        self.client: LightstreamerClient | None = None
+        self.subscription: Subscription | None = None
         self.connected = False
-        self.current_value: Optional[float] = None
+        self.current_value: float | None = None
         self._connect_lock = asyncio.Lock()
-        self._polling_task: Optional[asyncio.Task] = None
+        self._polling_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         """Start the telemetry polling service"""
@@ -35,10 +37,8 @@ class TelemetryService:
         """Stop the telemetry service"""
         if self._polling_task:
             self._polling_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._polling_task
-            except asyncio.CancelledError:
-                pass
         self._disconnect()
 
     async def _polling_loop(self) -> None:
@@ -60,7 +60,7 @@ class TelemetryService:
             if value is not None:
                 # Check if database is empty to always store first value
                 latest_db_reading = await self.db.get_latest_reading()
-                
+
                 # Store if: database is empty OR value has changed from last stored value
                 should_store = False
                 if latest_db_reading is None:
@@ -70,15 +70,17 @@ class TelemetryService:
                 elif value != latest_db_reading.urine_tank_level:
                     # Value changed from last stored value
                     should_store = True
-                    logger.info(f"Value changed from {latest_db_reading.urine_tank_level}% to {value}%")
-                
+                    logger.info(
+                        f"Value changed from {latest_db_reading.urine_tank_level}% to {value}%"
+                    )
+
                 if should_store:
                     await self._store_value(value)
                     logger.info(f"Stored new urine tank level: {value}%")
         except Exception as e:
             logger.error(f"Failed to poll telemetry: {e}")
 
-    async def _get_current_value(self) -> Optional[float]:
+    async def _get_current_value(self) -> float | None:
         """Get current telemetry value from Lightstreamer"""
         if not await self._ensure_connected():
             logger.warning("Could not connect to Lightstreamer")
@@ -112,7 +114,7 @@ class TelemetryService:
             logger.info("Connecting to NASA ISS telemetry stream...")
             self.client = LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")
 
-            connection_future = asyncio.Future()
+            connection_future: asyncio.Future[bool] = asyncio.Future()
 
             class ConnectionListener:
                 def onStatusChange(self, new_status: str) -> None:
@@ -134,7 +136,7 @@ class TelemetryService:
                     await self._subscribe_telemetry()
                     logger.info("Successfully connected to ISS telemetry stream")
                     return True
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Connection to Lightstreamer timed out after 15 seconds")
 
         except Exception as e:
@@ -151,10 +153,10 @@ class TelemetryService:
         self.subscription = Subscription("MERGE", [URINE_TANK_NODE], ["Value"])
 
         class TelemetryListener:
-            def __init__(self, service: 'TelemetryService'):
+            def __init__(self, service: "TelemetryService"):
                 self.service = service
 
-            def onItemUpdate(self, update) -> None:
+            def onItemUpdate(self, update: Any) -> None:
                 item_name = update.getItemName()
                 value = update.getValue("Value")
                 if value is not None and item_name == URINE_TANK_NODE:
@@ -179,8 +181,5 @@ class TelemetryService:
 
     async def _store_value(self, value: float) -> None:
         """Store telemetry value in database"""
-        reading = TelemetryReading(
-            timestamp=datetime.utcnow(),
-            urine_tank_level=value
-        )
+        reading = TelemetryReading(timestamp=datetime.utcnow(), urine_tank_level=value)
         await self.db.add_reading(reading)

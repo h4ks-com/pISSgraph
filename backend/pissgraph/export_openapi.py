@@ -12,21 +12,21 @@ def export_openapi_json(output_path: str) -> None:
     """Export OpenAPI JSON to file without starting the server."""
     # Create a dummy database instance (won't be used)
     database = Database(":memory:")
-    
+
     # Create the FastAPI app with seed endpoint enabled for OpenAPI documentation
     app = create_app(database, enable_seed_endpoint=True, telemetry_service=None)
-    
+
     # Generate OpenAPI JSON
     openapi_json = app.openapi()
-    
+
     # Ensure output directory exists
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Write to file
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         json.dump(openapi_json, f, indent=2, default=str)
-    
+
     print(f"OpenAPI JSON exported to {output_path}")
 
 

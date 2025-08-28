@@ -1,3 +1,7 @@
+# Dependencies
+node_modules/
+.pnpm-debug.log*
+
 # Environment files
 .env
 .env.local
@@ -6,9 +10,26 @@
 # Docker volumes
 data/
 
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # Logs
 *.log

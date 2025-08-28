@@ -39,12 +39,12 @@ pISSgraph is a real-time monitoring system that tracks and visualizes the ISS ur
    ```bash
    curl -X POST http://localhost:8000/telemetry/seed
    ```
-   
+
 6. To clear all telemetry data from the database:
    ```bash
    curl -X DELETE http://localhost:8000/telemetry/clear
    ```
-   
+
    Note: Both seed and clear endpoints can be disabled by setting `ENABLE_SEED_ENDPOINT=false`
 
 ## Architecture

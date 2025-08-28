@@ -37,7 +37,7 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
       setError(null)
       const response = await DefaultService.getTelemetryTelemetryGet(
         undefined, // start_time
-        undefined, // end_time  
+        undefined, // end_time
         timeRange, // hours
         1000       // limit
       )
@@ -125,7 +125,7 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
           {lastUpdate && `Last updated: ${format(lastUpdate, 'HH:mm:ss')}`}
         </div>
       </div>
-      
+
       <div className="bg-white p-4 rounded-lg shadow">
         <div className="mb-4">
           <div className="text-3xl font-bold" style={{ color: getLineColor(currentLevel) }}>
@@ -160,12 +160,12 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
                   borderRadius: '6px',
                 }}
               />
-              
+
               {/* Warning lines */}
               <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="5 5" />
               <ReferenceLine y={60} stroke="#f59e0b" strokeDasharray="5 5" />
               <ReferenceLine y={20} stroke="#10b981" strokeDasharray="5 5" />
-              
+
               <Line
                 type="stepAfter"
                 dataKey="urine_tank_level"
