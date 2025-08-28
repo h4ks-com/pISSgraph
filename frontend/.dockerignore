@@ -1,0 +1,40 @@
+# Version control
+.git/
+.gitignore
+
+# Dependencies (will be installed in container)
+node_modules/
+.pnpm-debug.log*
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Generated API client
+src/api/
+openapi.json
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Documentation
+README.md

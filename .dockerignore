@@ -1,0 +1,44 @@
+# Version control
+.git/
+.gitignore
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Dependencies (will be installed in container)
+backend/.venv/
+backend/venv/
+frontend/node_modules/
+
+# Build artifacts
+frontend/dist/
+frontend/build/
+
+# Database files (use mounted volumes)
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Generated files
+frontend/src/api/
+frontend/openapi.json
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Documentation
+README.md

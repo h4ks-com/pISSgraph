@@ -1,0 +1,15 @@
+# Environment files
+.env
+.env.local
+.env.production
+
+# Docker volumes
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
