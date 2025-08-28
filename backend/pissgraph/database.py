@@ -32,9 +32,7 @@ class Database:
         Path(database_path).parent.mkdir(parents=True, exist_ok=True)
 
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}", echo=False)
-        self.session_maker = async_sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )
+        self.session_maker = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
 
     async def init(self) -> None:
         """Initialize database tables"""

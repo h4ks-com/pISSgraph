@@ -13,7 +13,10 @@ from .telemetry import TelemetryService
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging level from environment
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+numeric_level = getattr(logging, log_level, logging.INFO)
+logging.basicConfig(level=numeric_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -32,14 +35,35 @@ telemetry_service = TelemetryService(database, POLLING_INTERVAL)
 async def lifespan(app: Any) -> AsyncGenerator[None, None]:
     """Application lifespan manager"""
     logger.info("Starting pISSgraph backend...")
-    await telemetry_service.start()
-    logger.info(f"Telemetry service started with {POLLING_INTERVAL}s polling interval")
 
+    # Start telemetry service in background without blocking startup
+    try:
+        await telemetry_service.start()
+        logger.info(
+            f"Telemetry service initialization completed "
+            f"(running in background with {POLLING_INTERVAL}s polling interval)"
+        )
+    except Exception as e:
+        logger.error(f"Failed to start telemetry service: {e}")
+        logger.info("API will still be available, but telemetry data collection is disabled")
+
+    logger.info("Backend startup complete - API endpoints are ready")
     yield
 
     logger.info("Shutting down pISSgraph backend...")
-    await telemetry_service.stop()
-    await database.close()
+    try:
+        await telemetry_service.stop()
+        logger.info("Telemetry service stopped")
+    except Exception as e:
+        logger.error(f"Error stopping telemetry service: {e}")
+
+    try:
+        await database.close()
+        logger.info("Database connection closed")
+    except Exception as e:
+        logger.error(f"Error closing database: {e}")
+
+    logger.info("Backend shutdown complete")
 
 
 app = create_app(database, CORS_ORIGINS, ENABLE_SEED_ENDPOINT, telemetry_service)

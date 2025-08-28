@@ -34,9 +34,7 @@ def create_app(
     enable_seed_endpoint: bool = True,
     telemetry_service=None,
 ) -> FastAPI:
-    app = FastAPI(
-        title="pISSgraph API", description="ISS Urine Tank Telemetry Data API", version="1.0.0"
-    )
+    app = FastAPI(title="pISSgraph API", description="ISS Urine Tank Telemetry Data API", version="1.0.0")
 
     app.add_middleware(
         CORSMiddleware,
@@ -63,9 +61,7 @@ def create_app(
         readings = await database.get_readings(start_time, end_time, limit)
 
         data_points = [
-            TelemetryDataPoint(
-                timestamp=reading.timestamp, urine_tank_level=reading.urine_tank_level
-            )
+            TelemetryDataPoint(timestamp=reading.timestamp, urine_tank_level=reading.urine_tank_level)
             for reading in reversed(readings)  # Reverse to get chronological order
         ]
 
@@ -78,9 +74,7 @@ def create_app(
             # Only add current timestamp if it's significantly newer than last reading
             # and if we have a time range that includes "now"
             time_diff = (current_time - last_reading.timestamp).total_seconds()
-            includes_now = (
-                not end_time or (end_time - current_time).total_seconds() >= -10
-            )  # Allow 10 second buffer
+            includes_now = not end_time or (end_time - current_time).total_seconds() >= -10  # Allow 10 second buffer
 
             if includes_now and time_diff > 60:  # More than 1 minute old
                 # Use live telemetry value if available, otherwise use last database value
@@ -88,9 +82,7 @@ def create_app(
                 if telemetry_service and telemetry_service.current_value is not None:
                     current_value = telemetry_service.current_value
 
-                data_points.append(
-                    TelemetryDataPoint(timestamp=current_time, urine_tank_level=current_value)
-                )
+                data_points.append(TelemetryDataPoint(timestamp=current_time, urine_tank_level=current_value))
 
         return TelemetryResponse(
             data=data_points,
@@ -108,9 +100,7 @@ def create_app(
         if not reading and telemetry_service:
             current_value = telemetry_service.current_value
             if current_value is not None:
-                return LatestReadingResponse(
-                    timestamp=datetime.utcnow(), urine_tank_level=current_value, status="live"
-                )
+                return LatestReadingResponse(timestamp=datetime.utcnow(), urine_tank_level=current_value, status="live")
 
         if not reading:
             raise HTTPException(status_code=404, detail="No telemetry data available")
