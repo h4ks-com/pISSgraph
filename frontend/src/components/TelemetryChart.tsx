@@ -43,11 +43,15 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
       )
 
       const chartData: ChartDataPoint[] = response.data.map((point: TelemetryDataPoint) => {
-        const timestamp = parseISO(point.timestamp)
+        // Backend sends UTC timestamps, parse and treat as UTC
+        // If timestamp doesn't end with Z, treat it as UTC
+        const timestampString = point.timestamp.endsWith('Z') ? point.timestamp : point.timestamp + 'Z'
+        const utcTimestamp = parseISO(timestampString)
+
         return {
-          timestamp: timestamp.getTime(),
+          timestamp: utcTimestamp.getTime(), // milliseconds since epoch (browser displays in local time)
           urine_tank_level: point.urine_tank_level,
-          formattedTime: format(timestamp, 'HH:mm:ss'),
+          formattedTime: format(utcTimestamp, 'HH:mm:ss'), // formats in local browser time
         }
       })
 
@@ -72,7 +76,13 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
   }, [fetchData, refreshInterval])
 
   const formatTooltipLabel = (timestamp: number) => {
-    return format(new Date(timestamp), 'MMM dd, HH:mm:ss')
+    // Format timestamp in user's local timezone with timezone indicator
+    const date = new Date(timestamp)
+    const timezoneShort = new Intl.DateTimeFormat('en', {
+      timeZoneName: 'short'
+    }).formatToParts(date).find(part => part.type === 'timeZoneName')?.value || 'Local'
+
+    return `${format(date, 'MMM dd, HH:mm:ss')} ${timezoneShort}`
   }
 
   const getLineColor = (level: number) => {
@@ -115,6 +125,10 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
 
   const currentLevel = data[data.length - 1]?.urine_tank_level || 0
 
+  const currentTimezone = new Intl.DateTimeFormat('en', {
+    timeZoneName: 'short'
+  }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value || 'Local'
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -122,7 +136,7 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
           ISS Urine Tank Level ({timeRange}h view)
         </h2>
         <div className="text-sm text-gray-500">
-          {lastUpdate && `Last updated: ${format(lastUpdate, 'HH:mm:ss')}`}
+          {lastUpdate && `Last updated: ${format(lastUpdate, 'HH:mm:ss')} ${currentTimezone}`}
         </div>
       </div>
 
@@ -190,6 +204,9 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
           <div className="flex items-center gap-2">
             <div className="w-3 h-px bg-green-500"></div>
             <span>Low (0-20%)</span>
+          </div>
+          <div className="ml-auto text-gray-400">
+            Times shown in {currentTimezone}
           </div>
         </div>
       </div>
