@@ -8,6 +8,8 @@ const TIME_RANGES = [
   { label: '24 Hours', value: 24 },
   { label: '3 Days', value: 72 },
   { label: '1 Week', value: 168 },
+  { label: '1 Month', value: 720 },
+  { label: '1 Year', value: 8760 },
 ]
 
 function App() {
@@ -20,9 +22,7 @@ function App() {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
             🚽 pISSgraph
           </h1>
-          <p className="text-gray-600">
-            Live ISS Urine Tank Telemetry Data
-          </p>
+          <p className="text-gray-600">Live ISS Urine Tank Telemetry Data</p>
         </header>
 
         <div className="mb-6">
@@ -44,10 +44,7 @@ function App() {
         </div>
 
         <main>
-          <TelemetryChart
-            timeRange={selectedTimeRange}
-            refreshInterval={30}
-          />
+          <TelemetryChart timeRange={selectedTimeRange} refreshInterval={30} />
         </main>
 
         <footer className="text-center mt-8 text-sm text-gray-500">
