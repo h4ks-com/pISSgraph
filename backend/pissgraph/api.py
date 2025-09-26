@@ -1,3 +1,4 @@
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
 
@@ -48,14 +49,14 @@ def create_app(
     async def get_telemetry(
         start_time: datetime | None = Query(None, description="Start time for data range"),
         end_time: datetime | None = Query(None, description="End time for data range"),
-        hours: int | None = Query(None, description="Number of hours from now", ge=1, le=168),
+        hours: int | None = Query(None, description="Number of hours from now", ge=1, le=720),
         limit: int = Query(1000, description="Maximum number of data points", ge=1, le=10000),
     ) -> TelemetryResponse:
         """Get ISS urine tank telemetry data"""
 
         # If hours is specified, use it to set start_time
         if hours is not None:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(UTC)
             start_time = end_time - timedelta(hours=hours)
 
         readings = await database.get_readings(start_time, end_time, limit)
@@ -69,12 +70,22 @@ def create_app(
         # This shows that the urine level is constant until the next change
         if data_points:
             last_reading = data_points[-1]  # Most recent reading
-            current_time = datetime.utcnow()
+            current_time = datetime.now(UTC)
 
             # Only add current timestamp if it's significantly newer than last reading
             # and if we have a time range that includes "now"
-            time_diff = (current_time - last_reading.timestamp).total_seconds()
-            includes_now = not end_time or (end_time - current_time).total_seconds() >= -10  # Allow 10 second buffer
+            # Ensure timestamp from database is timezone-aware
+            last_timestamp = (
+                last_reading.timestamp.replace(tzinfo=UTC)
+                if last_reading.timestamp.tzinfo is None
+                else last_reading.timestamp
+            )
+            time_diff = (current_time - last_timestamp).total_seconds()
+            # Ensure both datetimes are timezone-aware for comparison
+            end_time_aware = end_time.replace(tzinfo=UTC) if end_time and end_time.tzinfo is None else end_time
+            includes_now = (
+                not end_time_aware or (end_time_aware - current_time).total_seconds() >= -10
+            )  # Allow 10 second buffer
 
             if includes_now and time_diff > 60:  # More than 1 minute old
                 # Use live telemetry value if available, otherwise use last database value
@@ -100,13 +111,15 @@ def create_app(
         if not reading and telemetry_service:
             current_value = telemetry_service.current_value
             if current_value is not None:
-                return LatestReadingResponse(timestamp=datetime.utcnow(), urine_tank_level=current_value, status="live")
+                return LatestReadingResponse(timestamp=datetime.now(UTC), urine_tank_level=current_value, status="live")
 
         if not reading:
             raise HTTPException(status_code=404, detail="No telemetry data available")
 
         # Consider data stale if older than 10 minutes
-        is_stale = (datetime.utcnow() - reading.timestamp).total_seconds() > 600
+        current_time = datetime.now(UTC)
+        reading_time = reading.timestamp.replace(tzinfo=UTC) if reading.timestamp.tzinfo is None else reading.timestamp
+        is_stale = (current_time - reading_time).total_seconds() > 600
 
         return LatestReadingResponse(
             timestamp=reading.timestamp,
@@ -134,7 +147,7 @@ def create_app(
                 return {"message": "Database already contains data"}
 
             # Create some sample data points over the last hour
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             base_level = 45.0  # Start at 45%
 
             for i in range(12):  # 12 data points over the last hour

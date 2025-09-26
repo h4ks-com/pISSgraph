@@ -22,7 +22,7 @@ interface ChartDataPoint {
 }
 
 interface TelemetryChartProps {
-  timeRange: number // hours
+  timeRange: number | 'all' // hours or 'all' for all time mode
   refreshInterval?: number // seconds
 }
 
@@ -31,16 +31,92 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [timeWindow, setTimeWindow] = useState({ start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), end: new Date() }) // Default 30-day window
+  const [hasEarlierData, setHasEarlierData] = useState(true) // Track if there's data before current window
+
+  // Navigation functions for All Time mode
+  const moveTimeWindow = async (direction: 'left' | 'right') => {
+    if (timeRange !== 'all') return
+
+    const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
+    const moveAmount = windowSize * 0.5 // Move by half window size
+
+    const newWindow = {
+      start: new Date(timeWindow.start.getTime() + (direction === 'left' ? -moveAmount : moveAmount)),
+      end: new Date(timeWindow.end.getTime() + (direction === 'left' ? -moveAmount : moveAmount))
+    }
+
+    // If going left (earlier), check if there's data before the new window
+    if (direction === 'left') {
+      try {
+        const checkResponse = await DefaultService.getTelemetryTelemetryGet(
+          newWindow.start.toISOString(),
+          newWindow.end.toISOString(),
+          undefined,
+          1 // Just check if any data exists
+        )
+
+        if (checkResponse.data.length === 0) {
+          // No data in this window, try to find the earliest available data
+          const earliestAttemptStart = new Date('2020-01-01')
+          const attemptResponse = await DefaultService.getTelemetryTelemetryGet(
+            earliestAttemptStart.toISOString(),
+            new Date().toISOString(),
+            undefined,
+            10
+          )
+
+          if (attemptResponse.data.length > 0) {
+            const earliestTimestamp = parseISO(attemptResponse.data[0].timestamp.endsWith('Z') ? attemptResponse.data[0].timestamp : attemptResponse.data[0].timestamp + 'Z')
+            setTimeWindow({
+              start: earliestTimestamp,
+              end: new Date(earliestTimestamp.getTime() + windowSize)
+            })
+            setHasEarlierData(false)
+            return
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check for earlier data:', err)
+      }
+    }
+
+    setTimeWindow(newWindow)
+    setHasEarlierData(true) // Reset this when moving normally
+  }
+
+  const resetToNow = () => {
+    if (timeRange !== 'all') return
+
+    const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
+    const now = new Date()
+    setTimeWindow({
+      start: new Date(now.getTime() - windowSize),
+      end: now
+    })
+  }
 
   const fetchData = useCallback(async () => {
     try {
       setError(null)
-      const response = await DefaultService.getTelemetryTelemetryGet(
-        undefined, // start_time
-        undefined, // end_time
-        timeRange, // hours
-        1000       // limit
-      )
+      let response
+      if (timeRange === 'all') {
+        // All Time mode: use time window with start/end dates
+        response = await DefaultService.getTelemetryTelemetryGet(
+          timeWindow.start.toISOString(),
+          timeWindow.end.toISOString(),
+          undefined, // hours
+          1000       // limit
+        )
+      } else {
+        // Fixed time range mode: use hours parameter
+        response = await DefaultService.getTelemetryTelemetryGet(
+          undefined, // start_time
+          undefined, // end_time
+          timeRange, // hours
+          1000       // limit
+        )
+      }
 
       const chartData: ChartDataPoint[] = response.data.map((point: TelemetryDataPoint) => {
         // Backend sends UTC timestamps, parse and treat as UTC
@@ -55,6 +131,33 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
         }
       })
 
+      // Handle empty response in All Time mode - try to find earliest data
+      if (chartData.length === 0 && timeRange === 'all') {
+        // Try to get data from a much later time window to find the earliest available data
+        const now = new Date()
+        const earliestAttemptStart = new Date('2020-01-01') // Go back to a reasonable earliest date
+        const attemptResponse = await DefaultService.getTelemetryTelemetryGet(
+          earliestAttemptStart.toISOString(),
+          now.toISOString(),
+          undefined,
+          10 // Just get a few points to find the earliest
+        )
+
+        if (attemptResponse.data.length > 0) {
+          // Found some data, adjust time window to show the earliest data
+          const earliestTimestamp = parseISO(attemptResponse.data[0].timestamp.endsWith('Z') ? attemptResponse.data[0].timestamp : attemptResponse.data[0].timestamp + 'Z')
+          const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
+
+          setTimeWindow({
+            start: earliestTimestamp,
+            end: new Date(earliestTimestamp.getTime() + windowSize)
+          })
+
+          // Don't set empty data, let the effect re-run with new time window
+          return
+        }
+      }
+
       setData(chartData)
       setLastUpdate(new Date())
     } catch (err) {
@@ -62,7 +165,7 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
     } finally {
       setLoading(false)
     }
-  }, [timeRange])
+  }, [timeRange, timeWindow])
 
   useEffect(() => {
     fetchData()
@@ -133,12 +236,43 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">
-          ISS Urine Tank Level ({timeRange}h view)
+          ISS Urine Tank Level ({timeRange === 'all' ? 'All Time' : `${timeRange}h`} view)
         </h2>
         <div className="text-sm text-gray-500">
           {lastUpdate && `Last updated: ${format(lastUpdate, 'HH:mm:ss')} ${currentTimezone}`}
         </div>
       </div>
+
+      {timeRange === 'all' && (
+        <div className="flex justify-center items-center gap-4 bg-gray-100 p-3 rounded-lg">
+          <button
+            onClick={() => moveTimeWindow('left')}
+            disabled={!hasEarlierData}
+            className={`px-3 py-1 rounded text-sm ${
+              hasEarlierData
+                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            ← Earlier
+          </button>
+          <div className="text-sm text-gray-600">
+            {format(timeWindow.start, 'MMM dd, yyyy HH:mm')} - {format(timeWindow.end, 'MMM dd, yyyy HH:mm')}
+          </div>
+          <button
+            onClick={() => moveTimeWindow('right')}
+            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+          >
+            Later →
+          </button>
+          <button
+            onClick={resetToNow}
+            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+          >
+            Now
+          </button>
+        </div>
+      )}
 
       <div className="bg-white p-4 rounded-lg shadow">
         <div className="mb-4">

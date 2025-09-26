@@ -2,18 +2,18 @@ import { useState } from 'react'
 import TelemetryChart from './components/TelemetryChart'
 import './App.css'
 
-const TIME_RANGES = [
+const TIME_RANGES: { label: string; value: number | 'all' }[] = [
   { label: '1 Hour', value: 1 },
   { label: '6 Hours', value: 6 },
   { label: '24 Hours', value: 24 },
   { label: '3 Days', value: 72 },
   { label: '1 Week', value: 168 },
   { label: '1 Month', value: 720 },
-  { label: '1 Year', value: 8760 },
+  { label: 'All Time', value: 'all' },
 ]
 
 function App() {
-  const [selectedTimeRange, setSelectedTimeRange] = useState(24)
+  const [selectedTimeRange, setSelectedTimeRange] = useState<number | 'all'>(24)
 
   return (
     <div className="min-h-screen bg-gray-50">
