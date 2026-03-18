@@ -35,8 +35,8 @@ RUN pnpm run generate-client
 # Copy source code
 COPY frontend/ .
 
-# Build the application
-ARG VITE_API_BASE_URL
+# Build the application (API URL defaults to relative path for nginx proxy)
+ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm build
 

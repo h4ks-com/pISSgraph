@@ -3,8 +3,8 @@ import { createChart, ColorType, IChartApi, LineSeries, Time } from 'lightweight
 import { format, parseISO } from 'date-fns'
 import { DefaultService, OpenAPI } from '../api'
 
-// Configure API base URL
-OpenAPI.BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Configure API base URL - use relative path for nginx proxy, fallback to localhost for dev
+OpenAPI.BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 interface ChartDataPoint {
   time: Time
