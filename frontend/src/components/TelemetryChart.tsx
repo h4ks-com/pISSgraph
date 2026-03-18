@@ -89,7 +89,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
     if (!chartContainerRef.current) return
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
+      autoSize: true,
       height: 500,
       layout: {
         background: { type: ColorType.Solid, color: 'white' },
@@ -139,16 +139,9 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
     chartRef.current = chart
     seriesRef.current = lineSeries
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
-    }
-    window.addEventListener('resize', handleResize)
     chart.timeScale().fitContent()
 
     return () => {
-      window.removeEventListener('resize', handleResize)
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
