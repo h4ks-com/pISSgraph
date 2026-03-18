@@ -218,3 +218,4 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 }
 
 export default TelemetryChart
+
