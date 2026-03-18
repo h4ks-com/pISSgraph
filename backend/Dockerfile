@@ -23,8 +23,5 @@ COPY pissgraph/ ./pissgraph/
 # Create data directory
 RUN mkdir -p /app/data
 
-# Expose port
-EXPOSE 8000
-
 # Run the application
 CMD ["uv", "run", "python", "-m", "pissgraph.main"]

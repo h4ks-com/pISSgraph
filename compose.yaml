@@ -2,11 +2,13 @@ services:
   backend:
     build:
       context: ./backend
+    expose:
+      - "8000"
     environment:
       - PORT=8000
       - DATABASE_PATH=/app/data/pissgraph.db
       - POLLING_INTERVAL=${POLLING_INTERVAL:-60}
-      - CORS_ORIGINS=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGINS=${FRONTEND_URL:-*}
       - ENABLE_SEED_ENDPOINT=${ENABLE_SEED_ENDPOINT:-true}
     volumes:
       - pissgraph_data:/app/data
@@ -21,10 +23,10 @@ services:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
-      # VITE_API_BASE_URL uses relative paths (nginx proxies /telemetry to backend)
-      # For local dev with external backend, set BACKEND_URL in .env
       args:
         - VITE_API_BASE_URL=${BACKEND_URL:-}
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
