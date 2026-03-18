@@ -2,8 +2,6 @@ services:
   backend:
     build:
       context: ./backend
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
     environment:
       - PORT=8000
       - DATABASE_PATH=/app/data/pissgraph.db
@@ -25,8 +23,6 @@ services:
       dockerfile: ./frontend/Dockerfile
       args:
         - VITE_API_BASE_URL=${BACKEND_URL:-http://localhost:8000}
-    ports:
-      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     restart: unless-stopped
