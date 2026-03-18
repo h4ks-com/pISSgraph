@@ -170,3 +170,4 @@ def create_app(
             return {"message": f"Cleared {deleted_count} telemetry readings"}
 
     return app
+
