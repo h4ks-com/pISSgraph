@@ -3,8 +3,28 @@ import { createChart, ColorType, IChartApi, LineSeries, Time } from 'lightweight
 import { format, parseISO } from 'date-fns'
 import { DefaultService, OpenAPI } from '../api'
 
-// Configure API base URL
-OpenAPI.BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Dynamically determine API base URL based on hostname
+// Preview: https://2.piss.h4ks.com -> https://2.pissapi.h4ks.com
+// Production: https://piss.h4ks.com -> https://pissapi.h4ks.com
+const getApiBaseUrl = (): string => {
+  // First check for explicit env var
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  
+  const hostname = window.location.hostname
+  
+  // For h4ks.com domains, replace "piss" with "pissapi" in hostname
+  if (hostname.includes('h4ks.com')) {
+    const apiHostname = hostname.replace('piss', 'pissapi')
+    return `https://${apiHostname}`
+  }
+  
+  // Local dev
+  return 'http://localhost:8000'
+}
+
+OpenAPI.BASE = getApiBaseUrl()
 
 interface ChartDataPoint {
   time: Time
