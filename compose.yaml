@@ -6,7 +6,7 @@ services:
       - PORT=8000
       - DATABASE_PATH=/app/data/pissgraph.db
       - POLLING_INTERVAL=${POLLING_INTERVAL:-60}
-      - CORS_ORIGINS=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGINS=*
       - ENABLE_SEED_ENDPOINT=${ENABLE_SEED_ENDPOINT:-true}
     volumes:
       - pissgraph_data:/app/data
@@ -21,8 +21,6 @@ services:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
-      args:
-        - VITE_API_BASE_URL=${BACKEND_URL:-http://localhost:8000}
     depends_on:
       - backend
     restart: unless-stopped

@@ -24,6 +24,9 @@ PORT = int(os.getenv("PORT", "8000"))
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./data/pissgraph.db")
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "60"))
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+# Always allow all h4ks.com subdomains for preview deployments
+if not CORS_ORIGINS or CORS_ORIGINS == "":
+    CORS_ORIGINS = "*"
 ENABLE_SEED_ENDPOINT = os.getenv("ENABLE_SEED_ENDPOINT", "true").lower() == "true"
 
 # Global services

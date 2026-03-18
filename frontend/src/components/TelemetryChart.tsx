@@ -1,175 +1,161 @@
-import { useCallback, useEffect, useState } from 'react'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createChart, ColorType, IChartApi, LineSeries, Time } from 'lightweight-charts'
 import { format, parseISO } from 'date-fns'
-import { DefaultService, OpenAPI, TelemetryDataPoint } from '../api'
+import { DefaultService, OpenAPI } from '../api'
 
-// Configure API base URL
-OpenAPI.BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Dynamically determine API base URL based on hostname
+// Preview: https://2.piss.h4ks.com -> https://2.pissapi.h4ks.com
+// Production: https://piss.h4ks.com -> https://pissapi.h4ks.com
+const getApiBaseUrl = (): string => {
+  // First check for explicit env var
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  
+  const hostname = window.location.hostname
+  
+  // For h4ks.com domains, replace "piss" with "pissapi" in hostname
+  if (hostname.includes('h4ks.com')) {
+    const apiHostname = hostname.replace('piss', 'pissapi')
+    return `https://${apiHostname}`
+  }
+  
+  // Local dev
+  return 'http://localhost:8000'
+}
+
+OpenAPI.BASE = getApiBaseUrl()
 
 interface ChartDataPoint {
-  timestamp: number
-  urine_tank_level: number
-  formattedTime: string
+  time: Time
+  value: number
 }
 
 interface TelemetryChartProps {
-  timeRange: number | 'all' // hours or 'all' for all time mode
-  refreshInterval?: number // seconds
+  refreshInterval?: number
 }
 
-const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps) => {
-  const [data, setData] = useState<ChartDataPoint[]>([])
+const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [timeWindow, setTimeWindow] = useState({ start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), end: new Date() }) // Default 30-day window
-  const [hasEarlierData, setHasEarlierData] = useState(true) // Track if there's data before current window
+  const [currentLevel, setCurrentLevel] = useState<number>(0)
+  const [dataPointCount, setDataPointCount] = useState(0)
 
-  // Navigation functions for All Time mode
-  const moveTimeWindow = async (direction: 'left' | 'right') => {
-    if (timeRange !== 'all') return
-
-    const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
-    const moveAmount = windowSize * 0.5 // Move by half window size
-
-    const newWindow = {
-      start: new Date(timeWindow.start.getTime() + (direction === 'left' ? -moveAmount : moveAmount)),
-      end: new Date(timeWindow.end.getTime() + (direction === 'left' ? -moveAmount : moveAmount))
-    }
-
-    // If going left (earlier), check if there's data before the new window
-    if (direction === 'left') {
-      try {
-        const checkResponse = await DefaultService.getTelemetryTelemetryGet(
-          newWindow.start.toISOString(),
-          newWindow.end.toISOString(),
-          undefined,
-          1 // Just check if any data exists
-        )
-
-        if (checkResponse.data.length === 0) {
-          // No data in this window, try to find the earliest available data
-          const earliestAttemptStart = new Date('2020-01-01')
-          const attemptResponse = await DefaultService.getTelemetryTelemetryGet(
-            earliestAttemptStart.toISOString(),
-            new Date().toISOString(),
-            undefined,
-            10
-          )
-
-          if (attemptResponse.data.length > 0) {
-            const earliestTimestamp = parseISO(attemptResponse.data[0].timestamp.endsWith('Z') ? attemptResponse.data[0].timestamp : attemptResponse.data[0].timestamp + 'Z')
-            setTimeWindow({
-              start: earliestTimestamp,
-              end: new Date(earliestTimestamp.getTime() + windowSize)
-            })
-            setHasEarlierData(false)
-            return
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to check for earlier data:', err)
-      }
-    }
-
-    setTimeWindow(newWindow)
-    setHasEarlierData(true) // Reset this when moving normally
-  }
-
-  const resetToNow = () => {
-    if (timeRange !== 'all') return
-
-    const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
-    const now = new Date()
-    setTimeWindow({
-      start: new Date(now.getTime() - windowSize),
-      end: now
-    })
+  const getLineColor = (level: number): string => {
+    if (level >= 80) return '#ef4444'
+    if (level >= 60) return '#f59e0b'
+    if (level >= 40) return '#3b82f6'
+    if (level >= 20) return '#06b6d4'
+    return '#10b981'
   }
 
   const fetchData = useCallback(async () => {
     try {
       setError(null)
-      let response
-      if (timeRange === 'all') {
-        // All Time mode: use time window with start/end dates
-        response = await DefaultService.getTelemetryTelemetryGet(
-          timeWindow.start.toISOString(),
-          timeWindow.end.toISOString(),
-          undefined, // hours
-          1000       // limit
-        )
-      } else {
-        // Fixed time range mode: use hours parameter
-        response = await DefaultService.getTelemetryTelemetryGet(
-          undefined, // start_time
-          undefined, // end_time
-          timeRange, // hours
-          1000       // limit
-        )
-      }
+      const response = await DefaultService.getTelemetryTelemetryGet(undefined, undefined, undefined, 10000)
 
-      const chartData: ChartDataPoint[] = response.data.map((point: TelemetryDataPoint) => {
-        // Backend sends UTC timestamps, parse and treat as UTC
-        // If timestamp doesn't end with Z, treat it as UTC
+      const chartData: ChartDataPoint[] = response.data.map((point) => {
         const timestampString = point.timestamp.endsWith('Z') ? point.timestamp : point.timestamp + 'Z'
         const utcTimestamp = parseISO(timestampString)
-
         return {
-          timestamp: utcTimestamp.getTime(), // milliseconds since epoch (browser displays in local time)
-          urine_tank_level: point.urine_tank_level,
-          formattedTime: format(utcTimestamp, 'HH:mm:ss'), // formats in local browser time
+          time: (utcTimestamp.getTime() / 1000) as Time,
+          value: point.urine_tank_level,
         }
       })
 
-      // Handle empty response in All Time mode - try to find earliest data
-      if (chartData.length === 0 && timeRange === 'all') {
-        // Try to get data from a much later time window to find the earliest available data
-        const now = new Date()
-        const earliestAttemptStart = new Date('2020-01-01') // Go back to a reasonable earliest date
-        const attemptResponse = await DefaultService.getTelemetryTelemetryGet(
-          earliestAttemptStart.toISOString(),
-          now.toISOString(),
-          undefined,
-          10 // Just get a few points to find the earliest
-        )
-
-        if (attemptResponse.data.length > 0) {
-          // Found some data, adjust time window to show the earliest data
-          const earliestTimestamp = parseISO(attemptResponse.data[0].timestamp.endsWith('Z') ? attemptResponse.data[0].timestamp : attemptResponse.data[0].timestamp + 'Z')
-          const windowSize = timeWindow.end.getTime() - timeWindow.start.getTime()
-
-          setTimeWindow({
-            start: earliestTimestamp,
-            end: new Date(earliestTimestamp.getTime() + windowSize)
-          })
-
-          // Don't set empty data, let the effect re-run with new time window
-          return
-        }
+      if (seriesRef.current) {
+        seriesRef.current.setData(chartData)
       }
 
-      setData(chartData)
+      if (chartData.length > 0) {
+        setCurrentLevel(chartData[chartData.length - 1].value)
+      }
+
+      setDataPointCount(chartData.length)
       setLastUpdate(new Date())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data')
     } finally {
       setLoading(false)
     }
-  }, [timeRange, timeWindow])
+  }, [])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (!chartContainerRef.current) return
+
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 500,
+      layout: {
+        background: { type: ColorType.Solid, color: 'white' },
+        textColor: '#666',
+      },
+      grid: {
+        vertLines: { color: '#f0f0f0' },
+        horzLines: { color: '#f0f0f0' },
+      },
+      rightPriceScale: {
+        borderColor: '#ccc',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: {
+        borderColor: '#ccc',
+        timeVisible: true,
+        secondsVisible: true,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: true,
+        borderVisible: true,
+        visible: true,
+        minBarSpacing: 0.001,
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: { color: '#3b82f6', width: 1, style: 2, labelBackgroundColor: '#3b82f6' },
+        horzLine: { color: '#3b82f6', width: 1, style: 2, labelBackgroundColor: '#3b82f6' },
+      },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+    })
+
+    const lineSeries = chart.addSeries(LineSeries, {
+      color: '#3b82f6',
+      lineWidth: 2,
+      priceFormat: { type: 'percent', precision: 1 },
+      lastValueVisible: true,
+      priceLineVisible: true,
+    })
+
+    lineSeries.createPriceLine({ price: 80, color: '#ef4444', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Critical' })
+    lineSeries.createPriceLine({ price: 60, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Warning' })
+    lineSeries.createPriceLine({ price: 20, color: '#10b981', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Low' })
+
+    chartRef.current = chart
+    seriesRef.current = lineSeries
+
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth })
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    chart.timeScale().fitContent()
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      chart.remove()
+      chartRef.current = null
+      seriesRef.current = null
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
     if (refreshInterval > 0) {
@@ -178,170 +164,53 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
     }
   }, [fetchData, refreshInterval])
 
-  const formatTooltipLabel = (timestamp: number) => {
-    // Format timestamp in user's local timezone with timezone indicator
-    const date = new Date(timestamp)
-    const timezoneShort = new Intl.DateTimeFormat('en', {
-      timeZoneName: 'short'
-    }).formatToParts(date).find(part => part.type === 'timeZoneName')?.value || 'Local'
-
-    return `${format(date, 'MMM dd, HH:mm:ss')} ${timezoneShort}`
-  }
-
-  const getLineColor = (level: number) => {
-    if (level >= 80) return '#ef4444' // red - very full
-    if (level >= 60) return '#f59e0b' // amber - getting full
-    if (level >= 40) return '#3b82f6' // blue - moderate
-    if (level >= 20) return '#06b6d4' // cyan - low
-    return '#10b981' // green - very low
-  }
+  const currentTimezone = new Intl.DateTimeFormat('en', { timeZoneName: 'short' })
+    .formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value || 'Local'
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-600">Loading telemetry data...</div>
-      </div>
-    )
+    return <div className="flex items-center justify-center h-96"><div className="text-gray-600">Loading telemetry data...</div></div>
   }
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-96 space-y-4">
         <div className="text-red-600">Error: {error}</div>
-        <button
-          onClick={fetchData}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Retry
-        </button>
+        <button onClick={fetchData} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Retry</button>
       </div>
     )
   }
-
-  if (data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-600">No telemetry data available</div>
-      </div>
-    )
-  }
-
-  const currentLevel = data[data.length - 1]?.urine_tank_level || 0
-
-  const currentTimezone = new Intl.DateTimeFormat('en', {
-    timeZoneName: 'short'
-  }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value || 'Local'
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">
-          ISS Urine Tank Level ({timeRange === 'all' ? 'All Time' : `${timeRange}h`} view)
-        </h2>
+        <h2 className="text-xl font-semibold">ISS Urine Tank Level</h2>
         <div className="text-sm text-gray-500">
           {lastUpdate && `Last updated: ${format(lastUpdate, 'HH:mm:ss')} ${currentTimezone}`}
         </div>
       </div>
 
-      {timeRange === 'all' && (
-        <div className="flex justify-center items-center gap-4 bg-gray-100 p-3 rounded-lg">
-          <button
-            onClick={() => moveTimeWindow('left')}
-            disabled={!hasEarlierData}
-            className={`px-3 py-1 rounded text-sm ${
-              hasEarlierData
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            ← Earlier
-          </button>
-          <div className="text-sm text-gray-600">
-            {format(timeWindow.start, 'MMM dd, yyyy HH:mm')} - {format(timeWindow.end, 'MMM dd, yyyy HH:mm')}
-          </div>
-          <button
-            onClick={() => moveTimeWindow('right')}
-            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-          >
-            Later →
-          </button>
-          <button
-            onClick={resetToNow}
-            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
-          >
-            Now
-          </button>
-        </div>
-      )}
+      <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
+        <strong>Controls:</strong> 🖱️ <strong>Scroll</strong> to zoom · <strong>Drag</strong> to pan · <strong>Double-click</strong> to fit all
+      </div>
 
       <div className="bg-white p-4 rounded-lg shadow">
-        <div className="mb-4">
-          <div className="text-3xl font-bold" style={{ color: getLineColor(currentLevel) }}>
-            {currentLevel.toFixed(1)}%
+        <div className="mb-4 flex justify-between items-center">
+          <div>
+            <div className="text-3xl font-bold" style={{ color: getLineColor(currentLevel) }}>
+              {currentLevel.toFixed(1)}%
+            </div>
+            <div className="text-sm text-gray-500">Current Level</div>
           </div>
-          <div className="text-sm text-gray-500">Current Level</div>
+          <div className="text-sm text-gray-500">{dataPointCount.toLocaleString()} data points</div>
         </div>
 
-        <div className="h-96">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={['dataMin', 'dataMax']}
-                tickFormatter={(timestamp) => format(new Date(timestamp), 'HH:mm')}
-                stroke="#666"
-              />
-              <YAxis
-                domain={[0, 100]}
-                label={{ value: 'Level (%)', angle: -90, position: 'insideLeft' }}
-                stroke="#666"
-              />
-              <Tooltip
-                labelFormatter={formatTooltipLabel}
-                formatter={(value: number) => [`${value.toFixed(1)}%`, 'Urine Tank Level']}
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #ccc',
-                  borderRadius: '6px',
-                }}
-              />
-
-              {/* Warning lines */}
-              <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="5 5" />
-              <ReferenceLine y={60} stroke="#f59e0b" strokeDasharray="5 5" />
-              <ReferenceLine y={20} stroke="#10b981" strokeDasharray="5 5" />
-
-              <Line
-                type="stepAfter"
-                dataKey="urine_tank_level"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', strokeWidth: 2, r: 3 }}
-                activeDot={{ r: 5, fill: '#3b82f6' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <div ref={chartContainerRef} className="w-full" />
 
         <div className="mt-4 flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-px bg-red-500"></div>
-            <span>Critical (80%+)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-px bg-amber-500"></div>
-            <span>High (60-80%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-px bg-green-500"></div>
-            <span>Low (0-20%)</span>
-          </div>
-          <div className="ml-auto text-gray-400">
-            Times shown in {currentTimezone}
-          </div>
+          <div className="flex items-center gap-2"><div className="w-3 h-px bg-red-500"></div><span>Critical (80%+)</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-px bg-amber-500"></div><span>High (60-80%)</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-px bg-green-500"></div><span>Low (0-20%)</span></div>
+          <div className="ml-auto text-gray-400">Times shown in {currentTimezone}</div>
         </div>
       </div>
     </div>
@@ -349,3 +218,4 @@ const TelemetryChart = ({ timeRange, refreshInterval = 30 }: TelemetryChartProps
 }
 
 export default TelemetryChart
+

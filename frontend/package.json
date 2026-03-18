@@ -13,7 +13,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.8.0",
+    "lightweight-charts": "^5.0.0",
     "axios": "^1.6.0",
     "date-fns": "^2.30.0",
     "form-data": "^4.0.0"

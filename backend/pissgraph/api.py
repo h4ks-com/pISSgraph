@@ -37,9 +37,10 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="pISSgraph API", description="ISS Urine Tank Telemetry Data API", version="1.0.0")
 
+    # Allow all origins for public API (includes PR preview domains)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins.split(","),
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -170,3 +171,4 @@ def create_app(
             return {"message": f"Cleared {deleted_count} telemetry readings"}
 
     return app
+
