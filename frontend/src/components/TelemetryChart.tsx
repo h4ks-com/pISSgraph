@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createChart, ColorType, IChartApi, LineSeries, Time } from 'lightweight-charts'
-import { format, parseISO } from 'date-fns'
-import { DefaultService, OpenAPI } from '../api'
+const { useCallback, useEffect, useRef, useState } from 'react'
+const { format, parseISO } from 'date-fns'
+const { DefaultService, OpenAPI } from '../api'
 
 // Dynamically determine API base URL based on hostname
 const getApiBaseUrl = (): string => {
@@ -22,7 +21,7 @@ const getApiBaseUrl = (): string => {
 OpenAPI.BASE = getApiBaseUrl()
 
 interface ChartDataPoint {
-  time: Time
+  time: LightweightCharts.Time
   value: number
 }
 
@@ -32,8 +31,8 @@ interface TelemetryChartProps {
 
 const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null)
+  const chartRef = useRef<LightweightCharts.IChartApi | null>(null)
+  const seriesRef = useRef<ReturnType<LightweightCharts.IChartApi['addSeries']> | null>(null)
   const chartInitialized = useRef(false)
 
   const [loading, setLoading] = useState(true)
@@ -59,7 +58,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
         const timestampString = point.timestamp.endsWith('Z') ? point.timestamp : point.timestamp + 'Z'
         const utcTimestamp = parseISO(timestampString)
         return {
-          time: (utcTimestamp.getTime() / 1000) as Time,
+          time: (utcTimestamp.getTime() / 1000) as LightweightCharts.Time,
           value: point.urine_tank_level,
         }
       })
@@ -82,7 +81,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
   }, [])
 
   // Initialize chart once when component mounts
-  useLayoutEffect(() => {
+  useEffect(() => {
     // Prevent double-initialization in React 18 StrictMode
     if (chartInitialized.current) return
     
@@ -90,11 +89,11 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
     if (!container) return
 
     // Create chart with explicit dimensions
-    const chart = createChart(container, {
-      autoSize: true,
+    const chart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
       height: 500,
       layout: {
-        background: { type: ColorType.Solid, color: 'white' },
+        background: { type: LightweightCharts.ColorType.Solid, color: 'white' },
         textColor: '#666',
       },
       grid: {
@@ -126,7 +125,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     })
 
-    const lineSeries = chart.addSeries(LineSeries, {
+    const lineSeries = chart.addSeries(LightweightCharts.LineSeries, {
       color: '#3b82f6',
       lineWidth: 2,
       priceFormat: { type: 'percent', precision: 1 },
@@ -218,8 +217,8 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
           <div className="ml-auto text-gray-400">Times shown in {currentTimezone}</div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 }
 
 export default TelemetryChart
