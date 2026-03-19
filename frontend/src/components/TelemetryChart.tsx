@@ -4,23 +4,18 @@ import { format, parseISO } from 'date-fns'
 import { DefaultService, OpenAPI } from '../api'
 
 // Dynamically determine API base URL based on hostname
-// Preview: https://2.piss.h4ks.com -> https://2.pissapi.h4ks.com
-// Production: https://piss.h4ks.com -> https://pissapi.h4ks.com
 const getApiBaseUrl = (): string => {
-  // First check for explicit env var
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL
   }
   
   const hostname = window.location.hostname
   
-  // For h4ks.com domains, replace "piss" with "pissapi" in hostname
   if (hostname.includes('h4ks.com')) {
     const apiHostname = hostname.replace('piss', 'pissapi')
     return `https://${apiHostname}`
   }
   
-  // Local dev
   return 'http://localhost:8000'
 }
 
@@ -39,7 +34,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null)
-  const chartCreatedRef = useRef(false)
+  const chartInitialized = useRef(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -86,14 +81,15 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
     }
   }, [])
 
-  // Use useLayoutEffect to ensure chart is created after DOM is ready
+  // Initialize chart once when component mounts
   useLayoutEffect(() => {
-    // Skip if chart already created (React 18 StrictMode double-render protection)
-    if (chartCreatedRef.current) return
+    // Prevent double-initialization in React 18 StrictMode
+    if (chartInitialized.current) return
     
     const container = chartContainerRef.current
     if (!container) return
 
+    // Create chart with explicit dimensions
     const chart = createChart(container, {
       autoSize: true,
       height: 500,
@@ -138,29 +134,34 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
       priceLineVisible: true,
     })
 
+    // Add reference price lines
     lineSeries.createPriceLine({ price: 80, color: '#ef4444', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Critical' })
     lineSeries.createPriceLine({ price: 60, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Warning' })
     lineSeries.createPriceLine({ price: 20, color: '#10b981', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Low' })
 
     chartRef.current = chart
     seriesRef.current = lineSeries
-    chartCreatedRef.current = true
+    chartInitialized.current = true
 
     chart.timeScale().fitContent()
 
     return () => {
-      // Only cleanup on actual unmount, not StrictMode re-render
+      // Only cleanup on actual unmount
       if (chartRef.current) {
         chartRef.current.remove()
         chartRef.current = null
         seriesRef.current = null
-        chartCreatedRef.current = false
+        chartInitialized.current = false
       }
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Fetch data on mount
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
+  // Refresh interval
   useEffect(() => {
     if (refreshInterval > 0) {
       const interval = setInterval(fetchData, refreshInterval * 1000)
