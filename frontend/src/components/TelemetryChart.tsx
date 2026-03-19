@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createChart, ColorType, IChartApi, LineSeries, Time } from 'lightweight-charts'
 import { format, parseISO } from 'date-fns'
 import { DefaultService, OpenAPI } from '../api'
@@ -39,6 +39,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null)
+  const chartCreatedRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -85,10 +86,15 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
     }
   }, [])
 
-  useEffect(() => {
-    if (!chartContainerRef.current) return
+  // Use useLayoutEffect to ensure chart is created after DOM is ready
+  useLayoutEffect(() => {
+    // Skip if chart already created (React 18 StrictMode double-render protection)
+    if (chartCreatedRef.current) return
+    
+    const container = chartContainerRef.current
+    if (!container) return
 
-    const chart = createChart(chartContainerRef.current, {
+    const chart = createChart(container, {
       autoSize: true,
       height: 500,
       layout: {
@@ -138,13 +144,18 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 
     chartRef.current = chart
     seriesRef.current = lineSeries
+    chartCreatedRef.current = true
 
     chart.timeScale().fitContent()
 
     return () => {
-      chart.remove()
-      chartRef.current = null
-      seriesRef.current = null
+      // Only cleanup on actual unmount, not StrictMode re-render
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+        seriesRef.current = null
+        chartCreatedRef.current = false
+      }
     }
   }, [])
 
@@ -211,4 +222,3 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 }
 
 export default TelemetryChart
-
