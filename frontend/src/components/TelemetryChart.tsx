@@ -141,12 +141,15 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 
     chart.timeScale().fitContent()
 
-    // Hide the TradingView attribution logo
+    // Hide TradingView attribution link via CSS
     const container = chartContainerRef.current
-    const attribution = container.querySelector('a[href*="tradingview.com"]')
-    if (attribution && attribution.parentElement) {
-      attribution.parentElement.style.display = 'none'
-    }
+    const style = document.createElement('style')
+    style.textContent = `
+      a[href*="tradingview.com"] {
+        display: none !important;
+      }
+    `
+    container.appendChild(style)
 
     // Double-click to fit content
     const handleDoubleClick = () => {
