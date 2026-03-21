@@ -160,19 +160,8 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
   const currentTimezone = new Intl.DateTimeFormat('en', { timeZoneName: 'short' })
     .formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value || 'Local'
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-96"><div className="text-gray-600">Loading telemetry data...</div></div>
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <div className="text-red-600">Error: {error}</div>
-        <button onClick={fetchData} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Retry</button>
-      </div>
-    )
-  }
-
+  // Always render the chart container so the chart can be created on mount
+  // Use overlays for loading/error states instead of early returns
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -197,7 +186,27 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
           <div className="text-sm text-gray-500">{dataPointCount.toLocaleString()} data points</div>
         </div>
 
-        <div ref={chartContainerRef} className="w-full" style={{ height: '500px' }} />
+        {/* Chart container - always rendered so chart can be created on mount */}
+        <div className="relative">
+          <div ref={chartContainerRef} className="w-full" style={{ height: '500px' }} />
+          
+          {/* Loading overlay */}
+          {loading && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
+              <div className="text-gray-600">Loading telemetry data...</div>
+            </div>
+          )}
+
+          {/* Error overlay */}
+          {error && !loading && (
+            <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10 space-y-4">
+              <div className="text-red-600">Error: {error}</div>
+              <button onClick={fetchData} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-2"><div className="w-3 h-px bg-red-500"></div><span>Critical (80%+)</span></div>
@@ -211,4 +220,3 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 }
 
 export default TelemetryChart
-
