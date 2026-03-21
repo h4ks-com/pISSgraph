@@ -141,7 +141,21 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
 
     chart.timeScale().fitContent()
 
+    // Hide the TradingView attribution logo
+    const container = chartContainerRef.current
+    const attribution = container.querySelector('a[href*="tradingview.com"]')
+    if (attribution && attribution.parentElement) {
+      attribution.parentElement.style.display = 'none'
+    }
+
+    // Double-click to fit content
+    const handleDoubleClick = () => {
+      chart.timeScale().fitContent()
+    }
+    container.addEventListener('dblclick', handleDoubleClick)
+
     return () => {
+      container.removeEventListener('dblclick', handleDoubleClick)
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -183,7 +197,7 @@ const TelemetryChart = ({ refreshInterval = 30 }: TelemetryChartProps) => {
       </div>
 
       <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
-        <strong>Controls:</strong> 🖱️ <strong>Scroll</strong> to zoom · <strong>Drag</strong> to pan · <strong>Double-click</strong> to fit all
+        <strong>Controls:</strong> 🖱️ <strong>Scroll</strong> to zoom · <strong>Drag</strong> to pan · <strong>Double-click</strong> to reset
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow">
